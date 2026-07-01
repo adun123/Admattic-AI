@@ -73,6 +73,15 @@ export function RenderFinalModal({
         new TextEncoder().encode(concatList)
       );
 
+      const aspectRatio = validClips[0]?.aspectRatio === "16:9" ? "16:9" : "9:16";
+      const [outWidth, outHeight] =
+        aspectRatio === "16:9" ? [1920, 1080] : [1080, 1920];
+      const videoFilter = [
+        `scale=${outWidth}:${outHeight}:force_original_aspect_ratio=decrease`,
+        `pad=${outWidth}:${outHeight}:(ow-iw)/2:(oh-ih)/2:color=black`,
+        "setsar=1"
+      ].join(",");
+
       const execArgs = audioFile
         ? [
             "-f",
@@ -83,13 +92,26 @@ export function RenderFinalModal({
             "list.txt",
             "-i",
             "bgm.mp3",
+            "-vf",
+            videoFilter,
+            "-map",
+            "0:v:0",
+            "-map",
+            "1:a:0",
             "-c:v",
-            "copy",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-crf",
+            "23",
             "-c:a",
             "aac",
+            "-b:a",
+            "128k",
             "-shortest",
             "-movflags",
             "+faststart",
+            "-y",
             "output.mp4"
           ]
         : [
@@ -99,10 +121,19 @@ export function RenderFinalModal({
             "0",
             "-i",
             "list.txt",
-            "-c",
-            "copy",
+            "-vf",
+            videoFilter,
+            "-map",
+            "0:v:0",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-crf",
+            "23",
             "-movflags",
             "+faststart",
+            "-y",
             "output.mp4"
           ];
       setProgressLabel("Merender final MP4...");
