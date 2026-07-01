@@ -9,7 +9,7 @@ import { downloadVideo } from "../utils/downloadVideo";
 import { buildFinalAssemblyData } from "../utils/finalAssembly";
 import { createMockScenes } from "../utils/mockScenes";
 import { getWorkspaceTitle, readWorkspaceHistory, writeWorkspaceHistory } from "../utils/workspaceStorage";
-import { PreviewPlaylist, RenderFinalModal, TimelineBar, TopBar } from "./StudioChrome";
+import { AlertDialog, ConfirmDialog, PreviewPlaylist, RenderFinalModal, TimelineBar, TopBar } from "./StudioChrome";
 
 export function StudioWorkspace({
   userEmail,
@@ -575,25 +575,46 @@ export function StudioWorkspace({
     });
   }, [nodes]);
 
-  const generateAllScenes = useCallback(async () => {
+  const pendingSceneCount = nodes.filter(
+    (node) => node.data.kind === "scene" && node.data.status === "prompt_ready"
+  ).length;
+
+  const openGenerateAll = useCallback(() => {
     const pendingScenes = nodes.filter(
       (node) => node.data.kind === "scene" && node.data.status === "prompt_ready"
     );
     if (pendingScenes.length === 0) return;
-    const confirmed = window.confirm(
-      `Akan generate ${pendingScenes.length} video sekaligus.\n\n` +
-        `Estimasi biaya per video: $2.40 (reference) / $7.20 (no reference).\n` +
-        `Aksi ini tidak bisa dibatalkan dan akan mengurangi budget kamu.\n\n` +
-        `Lanjutkan?`
+    setGenerateAllPending({ count: pendingScenes.length, running: false });
+  }, [nodes]);
+
+  const cancelGenerateAll = useCallback(() => {
+    setGenerateAllPending(null);
+  }, []);
+
+  const confirmGenerateAll = useCallback(async () => {
+    const pendingScenes = nodes.filter(
+      (node) => node.data.kind === "scene" && node.data.status === "prompt_ready"
     );
-    if (!confirmed) return;
-    for (const scene of pendingScenes) {
-      await generateVideoForScene(scene);
+    if (pendingScenes.length === 0) {
+      setGenerateAllPending(null);
+      return;
+    }
+    setGenerateAllPending({ count: pendingScenes.length, running: true });
+    try {
+      for (const scene of pendingScenes) {
+        await generateVideoForScene(scene);
+      }
+    } finally {
+      setGenerateAllPending(null);
     }
   }, [nodes, generateVideoForScene]);
 
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isFinalRenderOpen, setIsFinalRenderOpen] = useState(false);
+  const [generateAllPending, setGenerateAllPending] = useState<{
+    count: number;
+    running: boolean;
+  } | null>(null);
 
   const approveOutput = useCallback(
     (outputNode: StudioNode) => {
@@ -863,27 +884,28 @@ export function StudioWorkspace({
         onResetCostLog={resetCostLog}
       />
       <section className="relative min-h-0 flex-1">
-        {errorMessage ? (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-            <div className="max-w-md rounded-xl border border-red-400/40 bg-red-950 p-6 text-slate-100 shadow-2xl">
-              <h3 className="mb-2 text-lg font-semibold text-red-200">
-                Generate Video Gagal
-              </h3>
-              <p className="mb-4 whitespace-pre-wrap text-sm leading-relaxed text-slate-200">
-                {errorMessage}
-              </p>
-              <div className="text-right">
-                <button
-                  type="button"
-                  onClick={() => setErrorMessage(null)}
-                  className="rounded-md bg-red-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-600"
-                >
-                  Tutup
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : null}
+        <AlertDialog
+        isOpen={!!errorMessage}
+        onClose={() => setErrorMessage(null)}
+        title={
+          errorMessage?.toLowerCase().includes("content policy")
+            ? "Konten Ditolak"
+            : "Generate Video Gagal"
+        }
+        message={errorMessage ?? ""}
+        variant={errorMessage?.toLowerCase().includes("content policy") ? "warning" : "danger"}
+      />
+
+      <ConfirmDialog
+        isOpen={generateAllPending !== null && !generateAllPending.running}
+        onCancel={cancelGenerateAll}
+        onConfirm={confirmGenerateAll}
+        title={`Generate ${generateAllPending?.count ?? 0} Video?`}
+        message={`Kamu akan generate semua scene yang belum digenerate.\n\nEstimasi biaya per video:\n• Dengan reference: ~$2.40\n• Tanpa reference: ~$7.20\n\nAksi ini tidak bisa dibatalkan dan akan langsung memotong kredit.`}
+        confirmLabel="Ya, Generate Semua"
+        cancelLabel="Batal"
+        variant="warning"
+      />
         <div className="absolute inset-0">
           <ReactFlow
             nodes={flowNodes}
@@ -901,10 +923,10 @@ export function StudioWorkspace({
             <MiniMap pannable zoomable nodeColor="#16c7d8" />
           </ReactFlow>
         </div>
-        <TimelineBar
+<TimelineBar
           timeline={timeline}
-          onGenerateAll={generateAllScenes}
-          pendingCount={nodes.filter((n) => n.data.kind === "scene" && n.data.status === "prompt_ready").length}
+          onGenerateAll={openGenerateAll}
+          pendingCount={pendingSceneCount}
         />
       </section>
       {isPreviewOpen ? (
