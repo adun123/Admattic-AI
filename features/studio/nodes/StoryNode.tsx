@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { Check, Edit3, FileText, ImagePlus, Loader2, Wand2, X } from "lucide-react";
+import { Check, Edit3, FileSearch, FileText, ImagePlus, Loader2, UploadCloud, Wand2, X } from "lucide-react";
 import { aspectRatioOptions, durationOptions, renderQualityOptions, sceneCountOptions, styleOptions, toneOptions } from "../constants";
 import type { StoryNodeData, StudioNode } from "../types";
 import { InfoPill, NodeActionButton, NodeInput, NodeSelect, NodeTextArea } from "./NodeControls";
@@ -9,6 +9,7 @@ import { NodeShell } from "./NodeShell";
 export function StoryNode({ data, selected }: NodeProps<StudioNode>) {
   const story = data as StoryNodeData;
   const referenceInputRef = useRef<HTMLInputElement | null>(null);
+  const storyFileInputRef = useRef<HTMLInputElement | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isUploadingReference, setIsUploadingReference] = useState(false);
   const [draft, setDraft] = useState({
@@ -74,6 +75,65 @@ export function StoryNode({ data, selected }: NodeProps<StudioNode>) {
       if (referenceInputRef.current) referenceInputRef.current.value = "";
     }
   };
+
+  const analyzeStoryFile = async (file?: File) => {
+    if (!file || !story.onAnalyzeStoryFile) return;
+    try {
+      await story.onAnalyzeStoryFile(file);
+    } finally {
+      if (storyFileInputRef.current) storyFileInputRef.current.value = "";
+    }
+  };
+
+  const isAuditFieldSatisfied = (field: string) => {
+    const normalized = field.toLowerCase();
+    if (
+      normalized.includes("story") ||
+      normalized.includes("script") ||
+      normalized.includes("alur") ||
+      normalized.includes("cerita") ||
+      normalized.includes("scene breakdown")
+    ) {
+      return story.story.trim().length >= 50;
+    }
+    if (
+      normalized.includes("protagonist") ||
+      normalized.includes("character") ||
+      normalized.includes("karakter") ||
+      normalized.includes("subject")
+    ) {
+      return story.protagonist.trim().length > 0;
+    }
+    if (normalized.includes("style") || normalized.includes("visual")) {
+      return Boolean(story.style || story.styleDirection.trim());
+    }
+    if (normalized.includes("duration") || normalized.includes("durasi")) {
+      return story.duration > 0;
+    }
+    if (normalized.includes("scene count") || normalized.includes("jumlah scene")) {
+      return story.sceneCount > 0;
+    }
+    if (normalized.includes("tone") || normalized.includes("mood")) {
+      return Boolean(story.tone);
+    }
+    if (normalized.includes("aspect") || normalized.includes("format")) {
+      return Boolean(story.aspectRatio);
+    }
+    return true;
+  };
+
+  const unresolvedMissingFields =
+    story.documentAudit?.missingFields.filter((field) => !isAuditFieldSatisfied(field)) ?? [];
+  const isStoryReady =
+    story.story.trim().length >= 50 &&
+    story.protagonist.trim().length > 0 &&
+    unresolvedMissingFields.length === 0;
+  const auditStatusLabel =
+    story.documentAudit?.readiness === "ready"
+      ? "Ready"
+      : story.documentAudit?.readiness === "partial"
+        ? "Partial"
+        : "Needs input";
 
   return (
     <NodeShell selected={selected}>
@@ -265,11 +325,30 @@ export function StoryNode({ data, selected }: NodeProps<StudioNode>) {
         )}
         <div className="nodrag grid grid-cols-2 gap-2">
           <input
+            ref={storyFileInputRef}
+            className="hidden"
+            type="file"
+            accept=".pdf,.ppt,.pptx,application/pdf,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            onChange={(event) => analyzeStoryFile(event.target.files?.[0])}
+          />
+          <input
             ref={referenceInputRef}
             className="hidden"
             type="file"
             accept="image/*,video/*,audio/*,.pdf"
             onChange={(event) => uploadReference(event.target.files?.[0])}
+          />
+          <NodeActionButton
+            icon={
+              story.isAnalyzingStoryFile ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <UploadCloud size={14} />
+              )
+            }
+            label={story.isAnalyzingStoryFile ? "Analyzing" : "Story File"}
+            onClick={() => storyFileInputRef.current?.click()}
+            disabled={story.isAnalyzingStoryFile}
           />
            <NodeActionButton
             icon={
@@ -283,14 +362,58 @@ export function StoryNode({ data, selected }: NodeProps<StudioNode>) {
             onClick={() => referenceInputRef.current?.click()}
             disabled={isUploadingReference}
           />
+          {story.storyFile && story.documentAudit ? (
+            <div className="col-span-2 space-y-2 rounded-md border border-studio-line bg-slate-950/30 p-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                    <FileSearch size={12} className="text-studio-cyan" />
+                    File audit
+                  </p>
+                  <p className="mt-1 truncate text-xs font-semibold text-slate-100">
+                    {story.storyFile.name}
+                  </p>
+                </div>
+                <span
+                  className={
+                    "shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase " +
+                    (story.documentAudit.readiness === "ready"
+                      ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-200"
+                      : story.documentAudit.readiness === "partial"
+                        ? "border-amber-400/30 bg-amber-400/10 text-amber-200"
+                        : "border-red-400/30 bg-red-400/10 text-red-200")
+                  }
+                >
+                  {auditStatusLabel}
+                </span>
+              </div>
+              <p className="text-[11px] leading-5 text-slate-300">
+                {story.documentAudit.summary}
+              </p>
+              {story.documentAudit.foundFields.length > 0 ? (
+                <p className="text-[10px] leading-4 text-emerald-200">
+                  Found: {story.documentAudit.foundFields.slice(0, 6).join(", ")}
+                </p>
+              ) : null}
+              {unresolvedMissingFields.length > 0 ? (
+                <p className="text-[10px] leading-4 text-amber-200">
+                  Lengkapi dulu: {unresolvedMissingFields.join(", ")}
+                </p>
+              ) : story.documentAudit.missingFields.length > 0 ? (
+                <p className="text-[10px] leading-4 text-cyan-100">
+                  Field yang kurang sudah tertutup oleh form di node ini.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
           {(story.referenceAssets ?? []).length > 0 ? (
             <div className="col-span-2 rounded-md border border-slate-600/40 bg-slate-800/30 px-2.5 py-1.5 text-[10px] leading-snug text-slate-300">
               Reference image dipakai untuk menjaga wajah/identitas karakter antar scene. Gunakan foto original yang kamu miliki hak pakainya.
             </div>
           ) : null}
-          {(story.story.trim().length < 50 || !story.protagonist.trim()) ? (
+          {!isStoryReady ? (
             <div className="col-span-2 rounded-md border border-amber-500/30 bg-amber-950/20 px-2.5 py-1.5 text-[10px] leading-snug text-amber-200">
-              Isi <strong>Cerita</strong> (min. 50 karakter) dan <strong>Karakter utama</strong> sebelum generate.
+              Isi <strong>Cerita</strong> (min. 50 karakter), <strong>Karakter utama</strong>, dan arahan yang masih kurang sebelum generate.
             </div>
           ) : null}
           <NodeActionButton
@@ -305,8 +428,8 @@ export function StoryNode({ data, selected }: NodeProps<StudioNode>) {
             onClick={story.onGenerateStructure}
             disabled={
               story.isGeneratingStructure ||
-              story.story.trim().length < 50 ||
-              !story.protagonist.trim()
+              story.isAnalyzingStoryFile ||
+              !isStoryReady
             }
             primary
           />

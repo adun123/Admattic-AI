@@ -1,13 +1,15 @@
-import { Film } from "lucide-react";
+import { Film, X } from "lucide-react";
 import type { OutputNodeData } from "../types";
 
 export function TimelineBar({
   timeline,
   onGenerateAll,
+  onRemoveClip,
   pendingCount
 }: {
   timeline: OutputNodeData[];
   onGenerateAll?: () => void;
+  onRemoveClip?: (sceneId: string) => void;
   pendingCount: number;
 }) {
   return (
@@ -25,10 +27,21 @@ export function TimelineBar({
           timeline.map((item, index) => (
             <div
               key={`${item.sceneId}-${index}`}
-              className="min-w-36 rounded-md border border-emerald-400/30 bg-emerald-400/10 px-3 py-2"
+              className="group flex min-w-40 items-start gap-2 rounded-md border border-emerald-400/30 bg-emerald-400/10 px-3 py-2"
             >
-              <p className="truncate text-xs font-semibold text-emerald-100">{item.sceneTitle}</p>
-              <p className="mt-1 text-[10px] text-emerald-200/70">Approved clip</p>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-semibold text-emerald-100">{item.sceneTitle}</p>
+                <p className="mt-1 text-[10px] text-emerald-200/70">Approved clip</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => onRemoveClip?.(item.sceneId)}
+                className="grid h-6 w-6 shrink-0 place-items-center rounded border border-emerald-300/20 text-emerald-100/70 transition hover:border-red-300/60 hover:bg-red-400/10 hover:text-red-200"
+                title="Remove from final timeline"
+                disabled={!onRemoveClip}
+              >
+                <X size={12} />
+              </button>
             </div>
           ))
         )}

@@ -1,12 +1,28 @@
 import { useRef, useState } from "react";
-import { Download, Sparkles, X } from "lucide-react";
+import { Download, History, Sparkles, X } from "lucide-react";
 import type { OutputNodeData } from "../types";
+
+export type FinalRenderVersion = {
+  id: string;
+  url: string;
+  size: number;
+  createdAt: string;
+  clipCount: number;
+  aspectRatio: string;
+  hasAudio: boolean;
+};
 
 export function RenderFinalModal({
   timeline,
+  aspectRatio,
+  history,
+  onHistoryChange,
   onClose
 }: {
   timeline: OutputNodeData[];
+  aspectRatio?: string;
+  history: FinalRenderVersion[];
+  onHistoryChange: (history: FinalRenderVersion[]) => void;
   onClose: () => void;
 }) {
   const [status, setStatus] = useState<
@@ -15,10 +31,18 @@ export function RenderFinalModal({
   const [progressLabel, setProgressLabel] = useState<string>("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [outputUrl, setOutputUrl] = useState<string | null>(null);
+  const [renderProgress, setRenderProgress] = useState<number>(0);
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const audioInputRef = useRef<HTMLInputElement | null>(null);
 
   const validClips = timeline.filter((clip) => clip.videoUrl);
+  const previewAspectRatio =
+    aspectRatio === "16:9" || aspectRatio === "9:16"
+      ? aspectRatio
+      : validClips[0]?.aspectRatio === "16:9"
+        ? "16:9"
+        : "9:16";
+  const activeOutputUrl = outputUrl ?? history[0]?.url ?? null;
 
   const statusLabel =
     status === "idle"
@@ -42,8 +66,15 @@ export function RenderFinalModal({
     ffmpegInstance.on("log", (message: { message: string }) => {
       console.log("[ffmpeg]", message.message);
     });
+    ffmpegInstance.on("progress", ({ progress }: { progress: number }) => {
+      if (!Number.isFinite(progress)) return;
+      setRenderProgress(Math.max(0, Math.min(100, Math.round(progress * 100))));
+    });
 
     try {
+      setErrorMessage(null);
+      setOutputUrl(null);
+      setRenderProgress(0);
       setStatus("loading-ffmpeg");
       setProgressLabel("Memuat engine FFmpeg...");
       const baseUrl = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd";
@@ -64,40 +95,33 @@ export function RenderFinalModal({
       }
 
       setStatus("rendering");
-      setProgressLabel("Menyiapkan daftar scene...");
-      const concatList = validClips
-        .map((_, i) => `file 'input${i}.mp4'`)
-        .join("\n");
-      await ffmpegInstance.writeFile(
-        "list.txt",
-        new TextEncoder().encode(concatList)
-      );
-
-      const aspectRatio = validClips[0]?.aspectRatio === "16:9" ? "16:9" : "9:16";
+      setProgressLabel("Menyiapkan canvas final...");
+      const finalAspectRatio =
+        previewAspectRatio === "16:9" ? "16:9" : "9:16";
       const [outWidth, outHeight] =
-        aspectRatio === "16:9" ? [1920, 1080] : [1080, 1920];
-      const videoFilter = [
-        `scale=${outWidth}:${outHeight}:force_original_aspect_ratio=decrease`,
-        `pad=${outWidth}:${outHeight}:(ow-iw)/2:(oh-ih)/2:color=black`,
-        "setsar=1"
-      ].join(",");
+        finalAspectRatio === "16:9" ? [1920, 1080] : [1080, 1920];
+      const normalizedVideoFilters = validClips
+        .map(
+          (_, i) =>
+            `[${i}:v]scale=${outWidth}:${outHeight}:force_original_aspect_ratio=decrease,` +
+            `pad=${outWidth}:${outHeight}:(ow-iw)/2:(oh-ih)/2:color=black,` +
+            `setsar=1,fps=30,format=yuv420p[v${i}]`
+        )
+        .join(";");
+      const concatInputs = validClips.map((_, i) => `[v${i}]`).join("");
+      const filterComplex = `${normalizedVideoFilters};${concatInputs}concat=n=${validClips.length}:v=1:a=0[vout]`;
 
       const execArgs = audioFile
         ? [
-            "-f",
-            "concat",
-            "-safe",
-            "0",
-            "-i",
-            "list.txt",
+            ...validClips.flatMap((_, i) => ["-i", `input${i}.mp4`]),
             "-i",
             "bgm.mp3",
-            "-vf",
-            videoFilter,
+            "-filter_complex",
+            filterComplex,
             "-map",
-            "0:v:0",
+            "[vout]",
             "-map",
-            "1:a:0",
+            `${validClips.length}:a:0`,
             "-c:v",
             "libx264",
             "-preset",
@@ -115,16 +139,11 @@ export function RenderFinalModal({
             "output.mp4"
           ]
         : [
-            "-f",
-            "concat",
-            "-safe",
-            "0",
-            "-i",
-            "list.txt",
-            "-vf",
-            videoFilter,
+            ...validClips.flatMap((_, i) => ["-i", `input${i}.mp4`]),
+            "-filter_complex",
+            filterComplex,
             "-map",
-            "0:v:0",
+            "[vout]",
             "-c:v",
             "libx264",
             "-preset",
@@ -142,8 +161,19 @@ export function RenderFinalModal({
       const outputData = (await ffmpegInstance.readFile("output.mp4")) as Uint8Array;
       const blob = new Blob([outputData.buffer as ArrayBuffer], { type: "video/mp4" });
       const url = URL.createObjectURL(blob);
+      const version: FinalRenderVersion = {
+        id: `${Date.now()}-${history.length + 1}`,
+        url,
+        size: blob.size,
+        createdAt: new Date().toISOString(),
+        clipCount: validClips.length,
+        aspectRatio: finalAspectRatio,
+        hasAudio: Boolean(audioFile)
+      };
       setOutputUrl(url);
+      onHistoryChange([version, ...history]);
       setStatus("done");
+      setRenderProgress(100);
       setProgressLabel(`Final MP4 siap diunduh (${(blob.size / (1024 * 1024)).toFixed(1)} MB)`);
     } catch (caught) {
       const errMsg = caught instanceof Error ? caught.message : String(caught);
@@ -155,7 +185,7 @@ export function RenderFinalModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
-      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col gap-4 rounded-xl border border-studio-line bg-studio-panel p-6 text-slate-100 shadow-2xl">
+      <div className="flex max-h-[92vh] w-full max-w-3xl flex-col gap-4 rounded-xl border border-studio-line bg-studio-panel p-6 text-slate-100 shadow-2xl">
         <div className="flex items-start justify-between">
           <div>
             <h2 className="flex items-center gap-2 text-base font-semibold">
@@ -164,7 +194,7 @@ export function RenderFinalModal({
             </h2>
             <p className="mt-1 text-xs text-slate-400">
               Menggabungkan {validClips.length} scene yang sudah di-approve jadi 1 file MP4.
-              Render dilakukan di browser (no API cost).
+              Render dilakukan di browser .
             </p>
           </div>
           <button
@@ -177,7 +207,7 @@ export function RenderFinalModal({
           </button>
         </div>
 
-        <div className="max-h-52 space-y-2 overflow-auto rounded-md border border-studio-line bg-slate-950/40 p-3">
+        <div className="max-h-32 space-y-2 overflow-auto rounded-md border border-studio-line bg-slate-950/40 p-3">
           {validClips.map((clip, index) => (
             <div
               key={`${clip.sceneId}-${index}`}
@@ -186,7 +216,7 @@ export function RenderFinalModal({
               <span className="truncate text-xs font-semibold text-emerald-100">
                 {index + 1}. {clip.sceneTitle}
               </span>
-              <span className="text-[10px] text-emerald-200/70">{clip.provider}</span>
+              {/* <span className="text-[10px] text-emerald-200/70">{clip.provider}</span> */}
             </div>
           ))}
           {validClips.length === 0 ? (
@@ -229,11 +259,26 @@ export function RenderFinalModal({
         </div>
 
         <div className="flex items-center justify-between">
-          <div className="text-xs">
+          <div className="min-w-0 flex-1 text-xs">
             <p className="font-semibold text-slate-200">{statusLabel}</p>
             <p className="text-slate-500">{progressLabel}</p>
           </div>
         </div>
+        {status === "loading-ffmpeg" || status === "downloading" || status === "rendering" ? (
+          <div className="space-y-1.5">
+            <div className="h-2 overflow-hidden rounded-full bg-slate-800">
+              <div
+                className="h-full rounded-full bg-studio-cyan transition-all"
+                style={{
+                  width: `${status === "rendering" ? renderProgress : status === "downloading" ? 25 : 8}%`
+                }}
+              />
+            </div>
+            <p className="text-right text-[10px] text-slate-500">
+              {status === "rendering" ? `${renderProgress}%` : "Preparing"}
+            </p>
+          </div>
+        ) : null}
 
         {errorMessage ? (
           <div className="rounded-md border border-red-400/40 bg-red-950/40 p-3 text-xs text-red-200">
@@ -241,21 +286,64 @@ export function RenderFinalModal({
           </div>
         ) : null}
 
-        {status === "done" && outputUrl ? (
-          <div className="rounded-md border border-emerald-400/30 bg-emerald-400/10 p-3">
+        {activeOutputUrl ? (
+          <div className="space-y-3 rounded-md border border-emerald-400/30 bg-slate-950/40 p-3">
             <video
-              className="mb-2 max-h-48 w-full rounded border border-studio-line bg-slate-950 object-cover"
+              className="mx-auto max-h-72 max-w-full rounded-md border border-studio-line bg-black object-contain"
+              style={{
+                aspectRatio: previewAspectRatio === "16:9" ? "16 / 9" : "9 / 16",
+                width: previewAspectRatio === "16:9" ? "min(100%, 520px)" : "min(56vw, 180px)"
+              }}
               controls
-              src={outputUrl}
+              src={activeOutputUrl}
             />
             <a
-              href={outputUrl}
+              href={activeOutputUrl}
               download="final-video.mp4"
               className="flex w-full items-center justify-center gap-2 rounded-md border border-studio-cyan bg-studio-cyan px-3 py-2 text-xs font-semibold text-slate-950 transition hover:bg-cyan-300"
             >
               <Download size={14} />
               Download final-video.mp4
             </a>
+          </div>
+        ) : null}
+        {history.length > 0 ? (
+          <div className="space-y-2 rounded-md border border-studio-line bg-slate-950/40 p-3">
+            <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+              <History size={12} />
+              Render history
+            </div>
+            <div className="max-h-28 space-y-1.5 overflow-auto">
+              {history.map((item, index) => (
+                <div
+                  key={item.id}
+                  className="flex items-center justify-between gap-2 rounded-md border border-studio-line bg-studio-panelSoft px-2 py-1.5"
+                >
+                  <button
+                    type="button"
+                    onClick={() => setOutputUrl(item.url)}
+                    className="min-w-0 flex-1 text-left"
+                    title="Preview render ini"
+                  >
+                    <p className="truncate text-xs font-semibold text-slate-200">
+                      Render {history.length - index} / {item.aspectRatio}
+                    </p>
+                    <p className="text-[10px] text-slate-500">
+                      {item.clipCount} scene, {(item.size / (1024 * 1024)).toFixed(1)} MB
+                      {item.hasAudio ? ", BGM" : ""}
+                    </p>
+                  </button>
+                  <a
+                    href={item.url}
+                    download={`final-video-v${history.length - index}.mp4`}
+                    className="grid h-7 w-7 shrink-0 place-items-center rounded border border-studio-line text-slate-300 hover:border-studio-cyan/70 hover:text-studio-cyan"
+                    title="Download render ini"
+                  >
+                    <Download size={13} />
+                  </a>
+                </div>
+              ))}
+            </div>
           </div>
         ) : null}
 

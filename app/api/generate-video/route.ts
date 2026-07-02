@@ -159,6 +159,11 @@ function buildReferenceSafePrompt(prompt: string) {
     .replace(/reference image/gi, "reference")
     .replace(/versi dirinya yang lebih muda/gi, "karakter dewasa yang sama")
     .replace(/lebih muda/gi, "dewasa dan konsisten")
+    .replace(/\busia\s+\d+(?:[,-]\d+)?(?:[- ]?(?:an|thn|tahun|yo))?\b/gi, "")
+    .replace(/\bpria\s+indonesia\b|\bwanita\s+indonesia\b/gi, "karakter utama")
+    .replace(/\bpria\b|\bwanita\b|\blaki-laki\b|\bperempuan\b/gi, "karakter utama")
+    .replace(/\bibu\b|\bbapak\b|\bpak\b|\bbu\b/gi, "karakter utama")
+    .replace(/\bCEO\b|\bfounder\b|\bdirektur\b|\bpresiden\b|\bmenteri\b/gi, "pemimpin")
     .replace(/pak\s*joko/gi, "karakter utama")
     .replace(/jokowi/gi, "karakter utama")
     .replace(/presiden/gi, "pemimpin")
@@ -167,10 +172,33 @@ function buildReferenceSafePrompt(prompt: string) {
     .slice(0, 900);
 
   return [
-    "A safe fictional brand-film scene using the uploaded reference images only as visual inspiration for a consistent adult main character.",
+    "A safe fictional brand-film scene using the uploaded reference images as the visual source for one consistent adult main character.",
+    "Preserve the same face from the reference image, overall identity, hair direction, expression style, and visual continuity across scenes.",
     cleanedPrompt,
     "Keep the character generic and fictional. Do not portray a real public figure, political figure, celebrity, or named person.",
-    "Do not change the character's age or identity. Use cinematic lighting, gentle motion, and a clean commercial tone."
+    "Do not replace the main character, do not create a different face, and do not change the character's visual identity.",
+    "Use cinematic lighting, gentle motion, and a clean commercial tone."
+  ].join(" ");
+}
+
+function buildReferenceFallbackPrompt(prompt: string) {
+  const cleanScene = prompt
+    .replace(/[^a-zA-Z0-9.,:;!?'"()\-\s]/g, " ")
+    .replace(/\b(real|public|celebrity|political|president|minister|named person)\b/gi, "")
+    .replace(/\busia\s+\d+(?:[,-]\d+)?(?:[- ]?(?:an|thn|tahun|yo))?\b/gi, "")
+    .replace(/\bpria\b|\bwanita\b|\blaki-laki\b|\bperempuan\b/gi, "karakter utama")
+    .replace(/\bibu\b|\bbapak\b|\bpak\b|\bbu\b/gi, "karakter utama")
+    .replace(/\bCEO\b|\bfounder\b|\bdirektur\b|\bpresiden\b|\bmenteri\b/gi, "pemimpin")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 420);
+
+  return [
+    "Safe fictional commercial video scene.",
+    "Use the uploaded reference image only to keep one consistent adult main character.",
+    "Keep the same face and overall look from the reference, but avoid portraying any real public figure or named person.",
+    cleanScene,
+    "Neutral brand-film action, no sensitive identity claims, no political context, cinematic lighting."
   ].join(" ");
 }
 
@@ -233,6 +261,59 @@ export async function POST(request: Request) {
       const apiError = error as { status?: number; body?: unknown };
       const details = serializeFalErrorBody(apiError.body);
       const falErrorType = getFalErrorType(apiError.body);
+      const shouldRetryReference =
+        provider === "veo3.1-fast-reference" &&
+        (falErrorType === "content_policy_violation" || falErrorType === "no_media_generated");
+
+      if (shouldRetryReference) {
+        try {
+          const retryInput = selected.input({
+            prompt: buildReferenceFallbackPrompt(body.prompt),
+            aspectRatio: body.aspectRatio ?? "9:16",
+            resolution: body.resolution ?? "720p",
+            durationSeconds,
+            generateAudio,
+            imageUrls: falHostedImageUrls
+          });
+
+          result = await fal.subscribe(selected.endpoint, {
+            input: retryInput,
+            logs: true
+          });
+        } catch (retryError) {
+          const retryApiError = retryError as { status?: number; body?: unknown };
+          const retryDetails = serializeFalErrorBody(retryApiError.body);
+          const retryFalErrorType = getFalErrorType(retryApiError.body);
+
+          if (retryFalErrorType === "content_policy_violation") {
+            return NextResponse.json(
+              {
+                error: "Content policy violation.",
+                code: "content_policy_violation",
+                message:
+                  "Model AI rejected this reference image even after a safer retry. The face may be too recognizable or the scene context is still sensitive.",
+                details: retryDetails ?? details
+              },
+              { status: 422 }
+            );
+          }
+
+          if (retryFalErrorType === "no_media_generated") {
+            return NextResponse.json(
+              {
+                error: "AI model rejected the reference-to-video request.",
+                code: "no_media_generated",
+                message:
+                  "AI model refused this reference + scene even after a safer retry. Try another reference image, remove the reference for this scene, or simplify the scene action.",
+                details: retryDetails ?? details
+              },
+              { status: 422 }
+            );
+          }
+
+          throw retryError;
+        }
+      } else
 
       if (falErrorType === "content_policy_violation") {
         return NextResponse.json(

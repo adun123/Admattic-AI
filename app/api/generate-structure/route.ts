@@ -88,10 +88,12 @@ export async function POST(request: Request) {
     const protagonist =
       body.protagonist?.trim() ||
       "tokoh utama yang sama dari cerita; jangan mengubah gender, usia, profesi, atau identitas visual antar scene";
+    const referenceAssets = body.referenceAssets ?? [];
+    const hasReferenceAssets = referenceAssets.length > 0;
     const referenceSummary =
-      body.referenceAssets && body.referenceAssets.length > 0
+      hasReferenceAssets
         ? "\n".concat(
-            body.referenceAssets
+            referenceAssets
               .map(
                 (asset, index) =>
                   `${index + 1}. ${asset.name} (${asset.purpose}/${asset.type}) ${asset.url}`
@@ -125,9 +127,20 @@ export async function POST(request: Request) {
         "",
         `Create exactly ${sceneCount} scenes. The sum of scene durations should be close to the total duration.`,
         "If the story is written in first person, treat the narrator as the same main character across all scenes.",
-        "Do not change the main character's gender, age range, profession, wardrobe direction, or visual identity between scenes.",
-        "If reference assets are provided, treat character/face references as the primary visual continuity source.",
-        "Every visualDescription and prompt must mention the same main character continuity anchor.",
+        hasReferenceAssets
+          ? [
+              "REFERENCE MODE:",
+              "The uploaded reference image is the source of truth for the main character's face and visual identity.",
+              "Every visualDescription and prompt must refer to the same person as 'tokoh utama dari gambar referensi'.",
+              "Do not invent a different face, age, body type, ethnicity, celebrity, public figure, or named real person.",
+              "Do not describe facial identity in detail; keep identity cues generic and let the reference image carry the face."
+            ].join("\n")
+          : [
+              "NO-REFERENCE MODE:",
+              `Use this exact character continuity anchor in every scene: ${protagonist}.`,
+              "Every visualDescription and prompt must preserve the same character identity, wardrobe direction, role, and overall look.",
+              "Do not introduce a different protagonist, duplicate protagonist, or change the character's apparent age/persona between scenes."
+            ].join("\n"),
         "Keep the selected tone, visual style, and aspect ratio consistent across every scene.",
         "If manual art direction is provided, it overrides generic realism and must appear consistently in every scene.",
         "Every prompt must explicitly preserve the selected tone and visual style.",

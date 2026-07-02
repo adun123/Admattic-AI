@@ -5,6 +5,8 @@ export type StoryNodeData = {
   story: string;
   protagonist: string;
   referenceAssets: ReferenceAsset[];
+  storyFile?: StoryFileSummary;
+  documentAudit?: StoryDocumentAudit;
   tone: string;
   style: string;
   styleDirection: string;
@@ -13,9 +15,29 @@ export type StoryNodeData = {
   sceneCount: number;
   renderQuality: string;
   isGeneratingStructure?: boolean;
+  isAnalyzingStoryFile?: boolean;
   onGenerateStructure?: () => void;
   onAddReference?: (file: File) => Promise<void>;
+  onAnalyzeStoryFile?: (file: File) => Promise<void>;
   onUpdate?: (patch: Partial<StoryNodeData>) => void;
+};
+
+export type StoryFileSummary = {
+  name: string;
+  type: string;
+  size: number;
+  analyzedAt: string;
+};
+
+export type StoryAuditReadiness = "ready" | "partial" | "needs_input";
+
+export type StoryDocumentAudit = {
+  documentType: string;
+  readiness: StoryAuditReadiness;
+  summary: string;
+  foundFields: string[];
+  missingFields: string[];
+  recommendation: string;
 };
 
 export type ReferenceAsset = {

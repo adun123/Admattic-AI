@@ -10,6 +10,20 @@ import { buildFinalAssemblyData } from "../utils/finalAssembly";
 import { createMockScenes } from "../utils/mockScenes";
 import { getWorkspaceTitle, readWorkspaceHistory, writeWorkspaceHistory } from "../utils/workspaceStorage";
 import { AlertDialog, ConfirmDialog, PreviewPlaylist, RenderFinalModal, TimelineBar, TopBar } from "./StudioChrome";
+import type { FinalRenderVersion } from "./RenderFinalModal";
+
+function normalizeWorkspaceNodes(nodes: StudioNode[]) {
+  return nodes.map((node) => {
+    if (node.data.kind !== "scene" || node.data.status !== "generating") return node;
+    return {
+      ...node,
+      data: {
+        ...node.data,
+        status: "prompt_ready" as const
+      }
+    };
+  });
+}
 
 export function StudioWorkspace({
   userEmail,
@@ -26,6 +40,7 @@ export function StudioWorkspace({
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [isLoadingProject, setIsLoadingProject] = useState(false);
   const [isGeneratingStructure, setIsGeneratingStructure] = useState(false);
+  const [isAnalyzingStoryFile, setIsAnalyzingStoryFile] = useState(false);
   const [workspaceHistory, setWorkspaceHistory] = useState<StoredWorkspace[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [costLog, setCostLog] = useState<CostEntry[]>(() => {
@@ -152,6 +167,89 @@ export function StudioWorkspace({
     [setNodes]
   );
 
+  const analyzeStoryFile = useCallback(
+    async (file: File) => {
+      setIsAnalyzingStoryFile(true);
+      const formData = new FormData();
+      formData.append("file", file);
+
+      try {
+        const response = await fetch("/api/analyze-story-file", {
+          method: "POST",
+          body: formData
+        });
+
+        if (!response.ok) {
+          const errorBody = await response.json().catch(() => null);
+          console.error("Failed to analyze story file", errorBody);
+          setSaveState("error");
+          setErrorMessage(
+            errorBody?.message ?? errorBody?.error ?? "Gagal menganalisis file story."
+          );
+          return;
+        }
+
+        const result = (await response.json()) as {
+          file: NonNullable<StoryNodeData["storyFile"]>;
+          audit: NonNullable<StoryNodeData["documentAudit"]> & {
+            extractedStory?: string;
+            detected?: {
+              protagonist?: string;
+              tone?: string;
+              style?: string;
+              styleDirection?: string;
+              duration?: number;
+              aspectRatio?: string;
+              sceneCount?: number;
+            };
+          };
+        };
+
+        setNodes((current) =>
+          current.map((node) => {
+            if (node.data.kind !== "story") return node;
+
+            const detected = result.audit.detected ?? {};
+
+            return {
+              ...node,
+              data: {
+                ...node.data,
+                story: node.data.story.trim() || result.audit.extractedStory || node.data.story,
+                protagonist:
+                  node.data.protagonist.trim() || detected.protagonist || node.data.protagonist,
+                tone: node.data.tone || detected.tone || node.data.tone,
+                style: node.data.style || detected.style || node.data.style,
+                styleDirection:
+                  node.data.styleDirection.trim() ||
+                  detected.styleDirection ||
+                  node.data.styleDirection,
+                duration: node.data.duration || detected.duration || node.data.duration,
+                aspectRatio: node.data.aspectRatio || detected.aspectRatio || node.data.aspectRatio,
+                sceneCount: node.data.sceneCount || detected.sceneCount || node.data.sceneCount,
+                storyFile: result.file,
+                documentAudit: {
+                  documentType: result.audit.documentType,
+                  readiness: result.audit.readiness,
+                  summary: result.audit.summary,
+                  foundFields: result.audit.foundFields,
+                  missingFields: result.audit.missingFields,
+                  recommendation: result.audit.recommendation
+                },
+                kind: "story" as const
+              }
+            };
+          })
+        );
+
+        setSaveState("idle");
+      } finally {
+        setIsAnalyzingStoryFile(false);
+      }
+    },
+    [setNodes]
+  );
+
   useEffect(() => {
     setWorkspaceHistory(readWorkspaceHistory());
 
@@ -160,7 +258,7 @@ export function StudioWorkspace({
       if (stored) {
         const workspace = JSON.parse(stored) as StoredWorkspace;
         if (workspace.nodes?.length) {
-          setNodes(workspace.nodes);
+          setNodes(normalizeWorkspaceNodes(workspace.nodes));
           setEdges(workspace.edges ?? []);
           setTimeline(workspace.timeline ?? []);
           setProjectId(workspace.projectId ?? null);
@@ -184,7 +282,7 @@ export function StudioWorkspace({
         title: getWorkspaceTitle(nodes),
         updatedAt: new Date().toISOString(),
         projectId,
-        nodes,
+        nodes: normalizeWorkspaceNodes(nodes),
         edges,
         timeline
       };
@@ -346,25 +444,42 @@ export function StudioWorkspace({
             .replace(/\busia\s+\d+(?:[,-]\d+)?(?:[- ]?(?:an|thn|tahun|yo))?\b/gi, "")
             .replace(/\bmuda\b|\btua\b/gi, "")
             .replace(/\bpria\b|\bwanita\b/g, "seseorang")
+            .replace(/\blaki-laki\b|\bperempuan\b/gi, "seseorang")
+            .replace(/\bibu\b|\bbapak\b|\bpak\b|\bbu\b/gi, "karakter utama")
+            .replace(/\bCEO\b|\bfounder\b|\bdirektur\b|\bpresiden\b|\bmenteri\b/gi, "pemimpin")
             .replace(/\bmale\b|\bfemale\b/gi, "a person")
             .replace(/\bman\b|\bwoman\b/gi, "person")
             .replace(/\s{2,}/g, " ")
             .trim();
 
+        const referenceScenePrompt = [
+          `Scene ${scene.sceneNumber}: ${scene.title}.`,
+          `Aksi dan visual: ${scene.visualDescription}.`,
+          `Kamera: ${scene.cameraDirection}.`,
+          `Mood: ${scene.mood}.`,
+          `Style: ${storyData?.style || styleOptions[0]}.`,
+          storyData?.styleDirection ? `Art direction: ${storyData.styleDirection}.` : ""
+        ]
+          .filter(Boolean)
+          .join(" ");
         const scenePromptSafe = hasReference
-          ? sanitizeIdentity(scene.prompt)
+          ? sanitizeIdentity(referenceScenePrompt)
           : scene.prompt;
 
         const promptParts = hasReference
           ? [
+              "Gunakan reference image sebagai sumber utama wajah, identitas visual, rambut, ekspresi natural, dan karakter utama yang sama.",
+              "Pertahankan karakter utama dari reference image secara konsisten di scene ini.",
               scenePromptSafe,
-              "Karakter utama mengikuti orang pada gambar referensi, tanpa mengubah identitas wajah."
+              "Jangan mengganti wajah, jangan membuat karakter baru, dan jangan mengubah identitas visual antar scene."
             ]
           : [
-              scenePromptSafe,
               storyData?.protagonist
-                ? `Karakter utama yang sama di semua scene: ${storyData.protagonist}.`
-                : "Pertahankan karakter utama yang sama di semua scene.",
+                ? `Character continuity bible: ${storyData.protagonist}.`
+                : "Character continuity bible: satu karakter utama yang sama dari awal sampai akhir.",
+              "Pertahankan wajah, persona, wardrobe direction, role, dan identitas visual karakter utama yang sama di semua scene.",
+              "Jangan membuat karakter utama baru dan jangan mengubah usia tampak, style rambut, atau peran karakter antar scene.",
+              scenePromptSafe,
               `Tone: ${storyData?.tone || toneOptions[0]}.`,
               `Visual style: ${storyData?.style || styleOptions[0]}.`,
               storyData?.styleDirection
@@ -373,6 +488,8 @@ export function StudioWorkspace({
               `Aspect ratio: ${aspectRatio}.`
             ].filter(Boolean);
 
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), 180000);
         const response = await fetch("/api/generate-video", {
           method: "POST",
           headers: {
@@ -386,8 +503,9 @@ export function StudioWorkspace({
             durationSeconds: sceneDuration,
             generateAudio: true,
             referenceImageUrls
-          })
-        });
+          }),
+          signal: controller.signal
+        }).finally(() => window.clearTimeout(timeout));
 
         if (!response.ok) {
           const errorBody = (await response.json().catch(() => null)) as {
@@ -510,7 +628,9 @@ export function StudioWorkspace({
         );
         setSaveState("error");
         setErrorMessage(
-          error instanceof Error ? error.message : "Gagal generate video."
+          error instanceof DOMException && error.name === "AbortError"
+            ? "Generate video terlalu lama dan dihentikan otomatis. Scene sudah dikembalikan ke prompt_ready, silakan coba lagi atau sederhanakan prompt/reference."
+            : error instanceof Error ? error.message : "Gagal generate video."
         );
         return;
       }
@@ -522,7 +642,7 @@ export function StudioWorkspace({
 
   const loadWorkspace = useCallback(
     (workspace: StoredWorkspace) => {
-      setNodes(workspace.nodes);
+      setNodes(normalizeWorkspaceNodes(workspace.nodes));
       setEdges(workspace.edges ?? []);
       setTimeline(workspace.timeline ?? []);
       setProjectId(workspace.projectId ?? null);
@@ -578,6 +698,9 @@ export function StudioWorkspace({
   const pendingSceneCount = nodes.filter(
     (node) => node.data.kind === "scene" && node.data.status === "prompt_ready"
   ).length;
+  const storyNodeForRender = nodes.find((node) => node.data.kind === "story");
+  const storyAspectRatio =
+    storyNodeForRender?.data.kind === "story" ? storyNodeForRender.data.aspectRatio : undefined;
 
   const openGenerateAll = useCallback(() => {
     const pendingScenes = nodes.filter(
@@ -611,6 +734,7 @@ export function StudioWorkspace({
 
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isFinalRenderOpen, setIsFinalRenderOpen] = useState(false);
+  const [finalRenderHistory, setFinalRenderHistory] = useState<FinalRenderVersion[]>([]);
   const [generateAllPending, setGenerateAllPending] = useState<{
     count: number;
     running: boolean;
@@ -631,6 +755,27 @@ export function StudioWorkspace({
         if (current.some((item) => item.sceneId === approvedData.sceneId)) return current;
         return [...current, approvedData];
       });
+      setSaveState("idle");
+    },
+    [setNodes]
+  );
+
+  const removeClipFromTimeline = useCallback(
+    (sceneId: string) => {
+      setTimeline((current) => current.filter((item) => item.sceneId !== sceneId));
+      setNodes((current) =>
+        current.map((node) =>
+          node.data.kind === "output" && node.data.sceneId === sceneId
+            ? {
+                ...node,
+                data: {
+                  ...node.data,
+                  status: "ready" as const
+                }
+              }
+            : node
+        )
+      );
       setSaveState("idle");
     },
     [setNodes]
@@ -818,8 +963,10 @@ export function StudioWorkspace({
         data: {
           ...node.data,
           isGeneratingStructure,
+          isAnalyzingStoryFile,
           onGenerateStructure: generateStructure,
           onAddReference: uploadReference,
+          onAnalyzeStoryFile: analyzeStoryFile,
           onUpdate: (patch: Partial<StoryNodeData>) => updateNodeData(node.id, patch)
         }
       };
@@ -926,6 +1073,7 @@ export function StudioWorkspace({
 <TimelineBar
           timeline={timeline}
           onGenerateAll={openGenerateAll}
+          onRemoveClip={removeClipFromTimeline}
           pendingCount={pendingSceneCount}
         />
       </section>
@@ -938,6 +1086,9 @@ export function StudioWorkspace({
       {isFinalRenderOpen ? (
         <RenderFinalModal
           timeline={timeline}
+          aspectRatio={storyAspectRatio}
+          history={finalRenderHistory}
+          onHistoryChange={setFinalRenderHistory}
           onClose={() => setIsFinalRenderOpen(false)}
         />
       ) : null}
