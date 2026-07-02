@@ -541,6 +541,13 @@ export function StudioWorkspace({
           videoUrl: string;
           provider: string;
           estimatedCost?: number;
+          pricing?: {
+            estimatedCostUsd: number;
+            estimatedCostIdr: number;
+            billableSeconds: number;
+            rateUsdPerSecond: number;
+            usdToIdr: number;
+          };
         };
 
         if (typeof result.estimatedCost === "number" && result.estimatedCost > 0) {
@@ -552,6 +559,9 @@ export function StudioWorkspace({
                 sceneTitle: scene.title,
                 provider: result.provider,
                 cost: result.estimatedCost ?? 0,
+                costIdr: result.pricing?.estimatedCostIdr,
+                billableSeconds: result.pricing?.billableSeconds,
+                rateUsdPerSecond: result.pricing?.rateUsdPerSecond,
                 timestamp: new Date().toISOString()
               }
             ];

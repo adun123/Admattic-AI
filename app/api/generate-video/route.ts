@@ -3,10 +3,21 @@ import { NextResponse } from "next/server";
 
 type VideoProvider = "veo3.1-fast" | "veo3.1-fast-reference" | "seedance-2.0-fast";
 
-const COST_PER_VIDEO: Record<VideoProvider, number> = {
-  "veo3.1-fast": 7.2,
-  "veo3.1-fast-reference": 2.4,
-  "seedance-2.0-fast": 0
+const USD_TO_IDR_ESTIMATE = 18000;
+
+const COST_PER_SECOND_USD: Record<VideoProvider, { audioOn: number; audioOff: number }> = {
+  "veo3.1-fast": {
+    audioOn: 0.15,
+    audioOff: 0.15
+  },
+  "veo3.1-fast-reference": {
+    audioOn: 0.15,
+    audioOff: 0.1
+  },
+  "seedance-2.0-fast": {
+    audioOn: 0,
+    audioOff: 0
+  }
 };
 
 type FalVideoResult = {
@@ -143,6 +154,35 @@ function getVideoUrl(data: FalVideoResult) {
 
 function getDuration(durationSeconds: number) {
   return durationSeconds <= 4 ? "4s" : durationSeconds <= 6 ? "6s" : "8s";
+}
+
+function getBillableDurationSeconds(provider: VideoProvider, durationSeconds: number) {
+  if (provider === "veo3.1-fast-reference") return 8;
+  if (provider === "veo3.1-fast") return durationSeconds <= 4 ? 4 : durationSeconds <= 6 ? 6 : 8;
+  return Math.max(4, Math.min(15, durationSeconds));
+}
+
+function estimateVideoCost({
+  provider,
+  durationSeconds,
+  generateAudio
+}: {
+  provider: VideoProvider;
+  durationSeconds: number;
+  generateAudio: boolean;
+}) {
+  const billableSeconds = getBillableDurationSeconds(provider, durationSeconds);
+  const rate = COST_PER_SECOND_USD[provider] ?? { audioOn: 0, audioOff: 0 };
+  const rateUsdPerSecond = generateAudio ? rate.audioOn : rate.audioOff;
+  const estimatedCostUsd = Number((billableSeconds * rateUsdPerSecond).toFixed(2));
+
+  return {
+    estimatedCostUsd,
+    estimatedCostIdr: Math.round(estimatedCostUsd * USD_TO_IDR_ESTIMATE),
+    billableSeconds,
+    rateUsdPerSecond,
+    usdToIdr: USD_TO_IDR_ESTIMATE
+  };
 }
 
 function getVeoResolution(resolution: string, allow4k = true) {
@@ -358,11 +398,18 @@ export async function POST(request: Request) {
       );
     }
 
+    const pricing = estimateVideoCost({
+      provider,
+      durationSeconds,
+      generateAudio
+    });
+
     return NextResponse.json({
       videoUrl,
       provider: selected.label,
       requestId: result.requestId,
-      estimatedCost: COST_PER_VIDEO[provider] ?? 0,
+      estimatedCost: pricing.estimatedCostUsd,
+      pricing,
       raw: data
     });
   } catch (error) {

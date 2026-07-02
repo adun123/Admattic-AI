@@ -255,9 +255,9 @@ export function RenderFinalModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
-      <div className="flex max-h-[92vh] w-full max-w-3xl flex-col gap-4 rounded-xl border border-studio-line bg-studio-panel p-6 text-slate-100 shadow-2xl">
+      <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-y-auto rounded-lg border border-studio-line bg-studio-panel text-slate-100 shadow-2xl">
         <div className="flex items-start justify-between">
-          <div>
+          <div className="p-5 pb-4">
             <h2 className="flex items-center gap-2 text-base font-semibold">
               <Sparkles size={18} className="text-studio-blue" />
               Render Final MP4
@@ -270,173 +270,194 @@ export function RenderFinalModal({
           <button
             type="button"
             onClick={onClose}
-            className="grid h-8 w-8 place-items-center rounded-md border border-studio-line text-slate-300 hover:border-red-400/60 hover:text-red-200"
+            className="m-5 grid h-8 w-8 place-items-center rounded-md border border-studio-line text-slate-300 hover:border-red-400/60 hover:text-red-200"
             title="Close"
           >
             <X size={15} />
           </button>
         </div>
 
-        <div className="max-h-32 space-y-2 overflow-auto rounded-md border border-studio-line bg-slate-950/40 p-3">
-          {validClips.map((clip, index) => (
-            <div
-              key={`${clip.sceneId}-${index}`}
-              className="flex items-center justify-between rounded-md border border-emerald-400/25 bg-emerald-400/5 px-3 py-1.5"
-            >
-              <span className="truncate text-xs font-semibold text-emerald-100">
-                {index + 1}. {clip.sceneTitle}
-              </span>
-              {/* <span className="text-[10px] text-emerald-200/70">{clip.provider}</span> */}
-            </div>
-          ))}
-          {validClips.length === 0 ? (
-            <p className="text-xs text-slate-500">Belum ada scene yang sudah di-approve.</p>
-          ) : null}
-        </div>
-
-        <div className="rounded-md border border-studio-line bg-slate-950/40 p-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold text-slate-200">Musik BGM (opsional)</p>
-              <p className="mt-0.5 text-[10px] text-slate-500">
-                Upload file audio untuk dijadikan background music.
-              </p>
-            </div>
-            <input
-              ref={audioInputRef}
-              type="file"
-              accept="audio/*"
-              className="hidden"
-              onChange={(event) => setAudioFile(event.target.files?.[0] ?? null)}
-            />
-            <button
-              type="button"
-              onClick={() => audioInputRef.current?.click()}
-              className="rounded-md border border-studio-line px-2.5 py-1 text-xs text-slate-300 hover:border-studio-cyan/70"
-            >
-              {audioFile ? audioFile.name.slice(0, 24) : "Upload audio"}
-            </button>
-          </div>
-          {audioFile ? (
-            <button
-              type="button"
-              onClick={() => setAudioFile(null)}
-              className="mt-1 text-[10px] text-red-300 hover:underline"
-            >
-              Hapus musik
-            </button>
-          ) : null}
-        </div>
-
-        <div className="flex items-center justify-between">
-          <div className="min-w-0 flex-1 text-xs">
-            <p className="font-semibold text-slate-200">{statusLabel}</p>
-            <p className="text-slate-500">{progressLabel}</p>
-          </div>
-        </div>
-        {status === "loading-ffmpeg" || status === "downloading" || status === "rendering" ? (
-          <div className="space-y-1.5">
-            <div className="h-2 overflow-hidden rounded-full bg-slate-800">
-              <div
-                className="h-full rounded-full bg-studio-cyan transition-all"
-                style={{
-                  width: `${status === "rendering" ? renderProgress : status === "downloading" ? 25 : 8}%`
-                }}
-              />
-            </div>
-            <p className="text-right text-[10px] text-slate-500">
-              {status === "rendering" ? `${renderProgress}%` : "Preparing"}
-            </p>
-          </div>
-        ) : null}
-
-        {errorMessage ? (
-          <div className="rounded-md border border-red-400/40 bg-red-950/40 p-3 text-xs text-red-200">
-            Error: {errorMessage}
-          </div>
-        ) : null}
-
-        {activeOutputUrl ? (
-          <div className="space-y-3 rounded-md border border-emerald-400/30 bg-slate-950/40 p-3">
-            <video
-              className="mx-auto max-h-72 max-w-full rounded-md border border-studio-line bg-black object-contain"
-              style={{
-                aspectRatio: previewAspectRatio === "16:9" ? "16 / 9" : "9 / 16",
-                width: previewAspectRatio === "16:9" ? "min(100%, 520px)" : "min(56vw, 180px)"
-              }}
-              controls
-              src={activeOutputUrl}
-            />
-            <a
-              href={activeOutputUrl}
-              download="final-video.mp4"
-              className="flex w-full items-center justify-center gap-2 rounded-md border border-studio-cyan bg-studio-cyan px-3 py-2 text-xs font-semibold text-slate-950 transition hover:bg-cyan-300"
-            >
-              <Download size={14} />
-              Download final-video.mp4
-            </a>
-          </div>
-        ) : null}
-        {history.length > 0 ? (
-          <div className="space-y-2 rounded-md border border-studio-line bg-slate-950/40 p-3">
-            <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-              <History size={12} />
-              Render history
-            </div>
-            <div className="max-h-28 space-y-1.5 overflow-auto">
-              {history.map((item, index) => (
-                <div
-                  key={item.id}
-                  className="flex items-center justify-between gap-2 rounded-md border border-studio-line bg-studio-panelSoft px-2 py-1.5"
-                >
-                  <button
-                    type="button"
-                    onClick={() => setOutputUrl(item.url)}
-                    className="min-w-0 flex-1 text-left"
-                    title="Preview render ini"
-                  >
-                    <p className="truncate text-xs font-semibold text-slate-200">
-                      Render {history.length - index} / {item.aspectRatio}
-                    </p>
-                    <p className="text-[10px] text-slate-500">
-                      {item.clipCount} scene, {(item.size / (1024 * 1024)).toFixed(1)} MB
-                      {item.hasAudio ? ", BGM" : ""}
-                      {item.isStored ? ", Supabase" : ", local"}
-                    </p>
-                  </button>
-                  <a
-                    href={item.url}
-                    download={`final-video-v${history.length - index}.mp4`}
-                    className="grid h-7 w-7 shrink-0 place-items-center rounded border border-studio-line text-slate-300 hover:border-studio-cyan/70 hover:text-studio-cyan"
-                    title="Download render ini"
-                  >
-                    <Download size={13} />
-                  </a>
+        <div className="grid grid-cols-1 gap-4 border-t border-studio-line p-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <section className="flex flex-col gap-4">
+            <div className="flex min-h-[360px] items-center justify-center rounded-md border border-studio-line bg-slate-950/50 p-4">
+              {activeOutputUrl ? (
+                <video
+                  className="max-w-full rounded-md border border-studio-line bg-black object-contain"
+                  style={{
+                    aspectRatio: previewAspectRatio === "16:9" ? "16 / 9" : "9 / 16",
+                    width: previewAspectRatio === "16:9" ? "min(100%, 680px)" : "auto",
+                    height: previewAspectRatio === "16:9" ? "auto" : "min(52vh, 440px)",
+                    maxHeight: "52vh"
+                  }}
+                  controls
+                  src={activeOutputUrl}
+                />
+              ) : (
+                <div className="flex flex-col items-center gap-3 text-center text-slate-500">
+                  <Sparkles size={26} className="text-slate-600" />
+                  <div>
+                    <p className="text-sm font-semibold text-slate-300">Belum ada final render</p>
+                    <p className="mt-1 text-xs">Klik Mulai render untuk membuat MP4 final.</p>
+                  </div>
                 </div>
-              ))}
+              )}
             </div>
-          </div>
-        ) : null}
+            {activeOutputUrl ? (
+              <a
+                href={activeOutputUrl}
+                download="final-video.mp4"
+                className="flex w-full items-center justify-center gap-2 rounded-md border border-studio-cyan bg-studio-cyan px-3 py-2 text-xs font-semibold text-slate-950 transition hover:bg-cyan-300"
+              >
+                <Download size={14} />
+                Download final-video.mp4
+              </a>
+            ) : null}
+          </section>
 
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex-1 rounded-md border border-studio-line px-3 py-2 text-xs font-semibold text-slate-300 hover:border-slate-400"
-          >
-            {status === "done" ? "Tutup" : "Batal"}
-          </button>
-          {status === "idle" || status === "error" ? (
+          <aside className="flex flex-col gap-3">
+            <div className="rounded-md border border-studio-line bg-slate-950/40 p-3">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                Approved scenes
+              </p>
+              <div className="mt-2 max-h-32 space-y-1.5 overflow-auto">
+                {validClips.map((clip, index) => (
+                  <div
+                    key={`${clip.sceneId}-${index}`}
+                    className="rounded-md border border-emerald-400/25 bg-emerald-400/5 px-2.5 py-1.5"
+                  >
+                    <p className="truncate text-xs font-semibold text-emerald-100">
+                      {index + 1}. {clip.sceneTitle}
+                    </p>
+                  </div>
+                ))}
+                {validClips.length === 0 ? (
+                  <p className="text-xs text-slate-500">Belum ada scene yang sudah di-approve.</p>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="rounded-md border border-studio-line bg-slate-950/40 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-slate-200">Musik BGM</p>
+                  <p className="mt-0.5 truncate text-[10px] text-slate-500">
+                    {audioFile ? audioFile.name : "Opsional"}
+                  </p>
+                </div>
+                <input
+                  ref={audioInputRef}
+                  type="file"
+                  accept="audio/*"
+                  className="hidden"
+                  onChange={(event) => setAudioFile(event.target.files?.[0] ?? null)}
+                />
+                <button
+                  type="button"
+                  onClick={() => audioInputRef.current?.click()}
+                  className="shrink-0 rounded-md border border-studio-line px-2.5 py-1 text-xs text-slate-300 hover:border-studio-cyan/70"
+                >
+                  Upload
+                </button>
+              </div>
+              {audioFile ? (
+                <button
+                  type="button"
+                  onClick={() => setAudioFile(null)}
+                  className="mt-2 text-[10px] text-red-300 hover:underline"
+                >
+                  Hapus musik
+                </button>
+              ) : null}
+            </div>
+
+            <div className="rounded-md border border-studio-line bg-slate-950/40 p-3">
+              <p className="text-xs font-semibold text-slate-200">{statusLabel}</p>
+              <p className="mt-1 min-h-4 text-[10px] text-slate-500">{progressLabel}</p>
+              {status === "loading-ffmpeg" || status === "downloading" || status === "rendering" ? (
+                <div className="mt-3 space-y-1.5">
+                  <div className="h-2 overflow-hidden rounded-full bg-slate-800">
+                    <div
+                      className="h-full rounded-full bg-studio-cyan transition-all"
+                      style={{
+                        width: `${status === "rendering" ? renderProgress : status === "downloading" ? 25 : 8}%`
+                      }}
+                    />
+                  </div>
+                  <p className="text-right text-[10px] text-slate-500">
+                    {status === "rendering" ? `${renderProgress}%` : "Preparing"}
+                  </p>
+                </div>
+              ) : null}
+            </div>
+
+            {errorMessage ? (
+              <div className="rounded-md border border-red-400/40 bg-red-950/40 p-3 text-xs text-red-200">
+                Error: {errorMessage}
+              </div>
+            ) : null}
+
+            {history.length > 0 ? (
+              <div className="min-h-0 flex-1 space-y-2 rounded-md border border-studio-line bg-slate-950/40 p-3">
+                <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                  <History size={12} />
+                  Render history
+                </div>
+              <div className="max-h-44 space-y-1.5 overflow-auto">
+                  {history.map((item, index) => (
+                    <div
+                      key={item.id}
+                      className="flex items-center justify-between gap-2 rounded-md border border-studio-line bg-studio-panelSoft px-2 py-1.5"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setOutputUrl(item.url)}
+                        className="min-w-0 flex-1 text-left"
+                        title="Preview render ini"
+                      >
+                        <p className="truncate text-xs font-semibold text-slate-200">
+                          Render {history.length - index} / {item.aspectRatio}
+                        </p>
+                        <p className="text-[10px] text-slate-500">
+                          {item.clipCount} scene, {(item.size / (1024 * 1024)).toFixed(1)} MB
+                          {item.hasAudio ? ", BGM" : ""}
+                          {item.isStored ? ", Supabase" : ", local"}
+                        </p>
+                      </button>
+                      <a
+                        href={item.url}
+                        download={`final-video-v${history.length - index}.mp4`}
+                        className="grid h-7 w-7 shrink-0 place-items-center rounded border border-studio-line text-slate-300 hover:border-studio-cyan/70 hover:text-studio-cyan"
+                        title="Download render ini"
+                      >
+                        <Download size={13} />
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </aside>
+        </div>
+
+        <div className="flex gap-2 border-t border-studio-line p-5 pt-4">
             <button
               type="button"
-              onClick={render}
-              disabled={validClips.length === 0}
-              className="flex flex-1 items-center justify-center gap-2 rounded-md border border-studio-cyan bg-studio-cyan px-3 py-2 text-xs font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={onClose}
+              className="flex-1 rounded-md border border-studio-line px-3 py-2 text-xs font-semibold text-slate-300 hover:border-slate-400"
             >
-              <Sparkles size={14} />
-              {status === "error" ? "Coba ulang" : "Mulai render"}
+              {status === "done" ? "Tutup" : "Batal"}
             </button>
-          ) : null}
+            {status === "idle" || status === "error" ? (
+              <button
+                type="button"
+                onClick={render}
+                disabled={validClips.length === 0}
+                className="flex flex-1 items-center justify-center gap-2 rounded-md border border-studio-cyan bg-studio-cyan px-3 py-2 text-xs font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Sparkles size={14} />
+                {status === "error" ? "Coba ulang" : "Mulai render"}
+              </button>
+            ) : null}
         </div>
       </div>
     </div>

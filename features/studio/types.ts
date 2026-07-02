@@ -120,5 +120,8 @@ export type CostEntry = {
   sceneTitle: string;
   provider: string;
   cost: number;
+  costIdr?: number;
+  billableSeconds?: number;
+  rateUsdPerSecond?: number;
   timestamp: string;
 };

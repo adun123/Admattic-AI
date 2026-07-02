@@ -56,6 +56,10 @@ export function TopBar({
     );
 
   const totalSpent = costLog.reduce((sum, entry) => sum + entry.cost, 0);
+  const totalSpentIdr = costLog.reduce(
+    (sum, entry) => sum + (entry.costIdr ?? Math.round(entry.cost * 18000)),
+    0
+  );
   const videoCount = costLog.length;
 
   return (
@@ -142,10 +146,10 @@ export function TopBar({
       <div className="flex items-center gap-3">
         {videoCount > 0 ? (
           <div className="flex items-center gap-2 rounded-md border border-studio-line bg-studio-panelSoft px-2.5 py-1 text-xs text-slate-300">
-            <span className="font-semibold text-emerald-300">
-              ${totalSpent.toFixed(2)} spent
+            <span className="font-semibold text-emerald-300">${totalSpent.toFixed(2)}</span>
+            <span className="text-slate-500">
+              ~Rp{totalSpentIdr.toLocaleString("id-ID")} ({videoCount} video)
             </span>
-            <span className="text-slate-500">({videoCount} video)</span>
             {onResetCostLog ? (
               <button
                 type="button"
