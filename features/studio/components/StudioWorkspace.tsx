@@ -740,6 +740,48 @@ export function StudioWorkspace({
     running: boolean;
   } | null>(null);
 
+  useEffect(() => {
+    if (!projectId) {
+      setFinalRenderHistory([]);
+      return;
+    }
+
+    let isActive = true;
+    void (async () => {
+      const { data, error } = await supabase
+        .from("final_renders")
+        .select(
+          "id,public_url,storage_path,file_size_bytes,clip_count,aspect_ratio,has_audio,created_at"
+        )
+        .eq("project_id", projectId)
+        .order("created_at", { ascending: false });
+
+      if (!isActive) return;
+      if (error) {
+        console.warn("Failed to load final render history", error);
+        return;
+      }
+
+      setFinalRenderHistory(
+        (data ?? []).map((item) => ({
+          id: String(item.id),
+          url: String(item.public_url),
+          storagePath: String(item.storage_path),
+          size: Number(item.file_size_bytes ?? 0),
+          clipCount: Number(item.clip_count ?? 0),
+          aspectRatio: String(item.aspect_ratio ?? "9:16"),
+          hasAudio: Boolean(item.has_audio),
+          createdAt: String(item.created_at),
+          isStored: true
+        }))
+      );
+    })();
+
+    return () => {
+      isActive = false;
+    };
+  }, [projectId]);
+
   const approveOutput = useCallback(
     (outputNode: StudioNode) => {
       if (outputNode.data.kind !== "output") return;
@@ -1087,6 +1129,7 @@ export function StudioWorkspace({
         <RenderFinalModal
           timeline={timeline}
           aspectRatio={storyAspectRatio}
+          projectId={projectId}
           history={finalRenderHistory}
           onHistoryChange={setFinalRenderHistory}
           onClose={() => setIsFinalRenderOpen(false)}

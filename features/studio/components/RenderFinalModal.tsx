@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { Download, History, Sparkles, X } from "lucide-react";
+import { supabase } from "@/lib/supabase/client";
 import type { OutputNodeData } from "../types";
 
 export type FinalRenderVersion = {
@@ -10,17 +11,21 @@ export type FinalRenderVersion = {
   clipCount: number;
   aspectRatio: string;
   hasAudio: boolean;
+  storagePath?: string;
+  isStored?: boolean;
 };
 
 export function RenderFinalModal({
   timeline,
   aspectRatio,
+  projectId,
   history,
   onHistoryChange,
   onClose
 }: {
   timeline: OutputNodeData[];
   aspectRatio?: string;
+  projectId: string | null;
   history: FinalRenderVersion[];
   onHistoryChange: (history: FinalRenderVersion[]) => void;
   onClose: () => void;
@@ -43,6 +48,74 @@ export function RenderFinalModal({
         ? "16:9"
         : "9:16";
   const activeOutputUrl = outputUrl ?? history[0]?.url ?? null;
+
+  const persistFinalRender = async ({
+    blob,
+    localUrl,
+    finalAspectRatio
+  }: {
+    blob: Blob;
+    localUrl: string;
+    finalAspectRatio: string;
+  }): Promise<FinalRenderVersion> => {
+    const fallbackVersion: FinalRenderVersion = {
+      id: `${Date.now()}-${history.length + 1}`,
+      url: localUrl,
+      size: blob.size,
+      createdAt: new Date().toISOString(),
+      clipCount: validClips.length,
+      aspectRatio: finalAspectRatio,
+      hasAudio: Boolean(audioFile),
+      isStored: false
+    };
+
+    if (!projectId) return fallbackVersion;
+
+    try {
+      const storagePath = `${projectId}/${Date.now()}-final-video.mp4`;
+      const { error: uploadError } = await supabase.storage
+        .from("final-renders")
+        .upload(storagePath, blob, {
+          contentType: "video/mp4",
+          upsert: false
+        });
+
+      if (uploadError) throw uploadError;
+
+      const { data: publicUrlData } = supabase.storage
+        .from("final-renders")
+        .getPublicUrl(storagePath);
+      const publicUrl = publicUrlData.publicUrl;
+
+      const { data, error: insertError } = await supabase
+        .from("final_renders")
+        .insert({
+          project_id: projectId,
+          storage_path: storagePath,
+          public_url: publicUrl,
+          aspect_ratio: finalAspectRatio,
+          clip_count: validClips.length,
+          file_size_bytes: blob.size,
+          has_audio: Boolean(audioFile)
+        })
+        .select("id,created_at")
+        .single();
+
+      if (insertError) throw insertError;
+
+      return {
+        ...fallbackVersion,
+        id: String(data.id),
+        url: publicUrl,
+        createdAt: String(data.created_at),
+        storagePath,
+        isStored: true
+      };
+    } catch (error) {
+      console.error("Failed to persist final render to Supabase", error);
+      return fallbackVersion;
+    }
+  };
 
   const statusLabel =
     status === "idle"
@@ -161,16 +234,13 @@ export function RenderFinalModal({
       const outputData = (await ffmpegInstance.readFile("output.mp4")) as Uint8Array;
       const blob = new Blob([outputData.buffer as ArrayBuffer], { type: "video/mp4" });
       const url = URL.createObjectURL(blob);
-      const version: FinalRenderVersion = {
-        id: `${Date.now()}-${history.length + 1}`,
-        url,
-        size: blob.size,
-        createdAt: new Date().toISOString(),
-        clipCount: validClips.length,
-        aspectRatio: finalAspectRatio,
-        hasAudio: Boolean(audioFile)
-      };
-      setOutputUrl(url);
+      setProgressLabel("Menyimpan riwayat final render...");
+      const version = await persistFinalRender({
+        blob,
+        localUrl: url,
+        finalAspectRatio
+      });
+      setOutputUrl(version.url);
       onHistoryChange([version, ...history]);
       setStatus("done");
       setRenderProgress(100);
@@ -331,6 +401,7 @@ export function RenderFinalModal({
                     <p className="text-[10px] text-slate-500">
                       {item.clipCount} scene, {(item.size / (1024 * 1024)).toFixed(1)} MB
                       {item.hasAudio ? ", BGM" : ""}
+                      {item.isStored ? ", Supabase" : ", local"}
                     </p>
                   </button>
                   <a
