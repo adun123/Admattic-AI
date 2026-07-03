@@ -29,9 +29,12 @@ export function writeWorkspaceHistory(workspace: StoredWorkspace) {
   if (typeof window === "undefined") return [];
 
   const history = readWorkspaceHistory();
+  const isSameWorkspace = (item: StoredWorkspace) =>
+    item.id === workspace.id ||
+    (Boolean(workspace.projectId) && item.projectId === workspace.projectId);
   const nextHistory = [
     workspace,
-    ...history.filter((item) => item.id !== workspace.id)
+    ...history.filter((item) => !isSameWorkspace(item))
   ].slice(0, 8);
 
   window.localStorage.setItem(historyWorkspaceKey, JSON.stringify(nextHistory));

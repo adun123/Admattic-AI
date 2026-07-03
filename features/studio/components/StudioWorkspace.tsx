@@ -278,7 +278,7 @@ export function StudioWorkspace({
 
     const timeout = window.setTimeout(() => {
       const workspace: StoredWorkspace = {
-        id: projectId ?? workspaceId,
+        id: workspaceId,
         title: getWorkspaceTitle(nodes),
         updatedAt: new Date().toISOString(),
         projectId,
