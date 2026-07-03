@@ -78,10 +78,10 @@ export function LoginForm({
             className="w-full max-w-sm rounded-lg border border-white/[0.12] bg-slate-950/[0.72] p-6 shadow-2xl backdrop-blur-xl"
           >
             <div className="flex items-center gap-3">
-              <div className="grid h-11 w-11 place-items-center overflow-hidden rounded-md border border-white/10 bg-white">
+              <div className="grid h-14 w-14 place-items-center overflow-hidden rounded-md border border-white/10 bg-slate-950">
                 <img
                   alt="Admattic"
-                  className="h-full w-full object-contain p-1"
+                  className="h-full w-full object-cover"
                   src="/images/lgo-admattic.jpg"
                 />
               </div>

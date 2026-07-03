@@ -65,10 +65,10 @@ export function TopBar({
   return (
     <header className="flex h-16 shrink-0 items-center justify-between border-b border-studio-line bg-studio-panel px-5">
       <div className="flex items-center gap-3">
-        <div className="grid h-9 w-9 place-items-center overflow-hidden rounded-md border border-studio-line bg-white">
+        <div className="grid h-11 w-11 place-items-center overflow-hidden rounded-md border border-studio-line bg-slate-950">
           <img
             alt="Admattic"
-            className="h-full w-full object-contain p-1"
+            className="h-full w-full object-cover"
             src="/images/lgo-admattic.jpg"
           />
         </div>
