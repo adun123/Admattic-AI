@@ -10,8 +10,8 @@ const sceneSchema = {
   properties: {
     scenes: {
       type: Type.ARRAY,
-      minItems: 4,
-      maxItems: 8,
+      minItems: 1,
+      maxItems: 12,
       items: {
         type: Type.OBJECT,
         properties: {
@@ -84,7 +84,7 @@ export async function POST(request: Request) {
     const styleDirection = body.styleDirection?.trim() || "Ikuti visual style preset secara konsisten.";
     const duration = body.duration ?? 60;
     const aspectRatio = body.aspectRatio ?? "9:16";
-    const sceneCount = Math.max(4, Math.min(8, body.sceneCount ?? 6));
+    const sceneCount = Math.max(1, Math.min(12, body.sceneCount ?? 6));
     const protagonist =
       body.protagonist?.trim() ||
       "tokoh utama yang sama dari cerita; jangan mengubah gender, usia, profesi, atau identitas visual antar scene";

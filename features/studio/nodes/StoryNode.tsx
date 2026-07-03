@@ -12,6 +12,12 @@ export function StoryNode({ data, selected }: NodeProps<StudioNode>) {
   const storyFileInputRef = useRef<HTMLInputElement | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isUploadingReference, setIsUploadingReference] = useState(false);
+  const [useCustomDuration, setUseCustomDuration] = useState(
+    Boolean(story.duration) && !durationOptions.includes(story.duration)
+  );
+  const [useCustomSceneCount, setUseCustomSceneCount] = useState(
+    Boolean(story.sceneCount) && !sceneCountOptions.includes(story.sceneCount)
+  );
   const [draft, setDraft] = useState({
     story: story.story,
     protagonist: story.protagonist,
@@ -26,6 +32,10 @@ export function StoryNode({ data, selected }: NodeProps<StudioNode>) {
 
   useEffect(() => {
     if (isEditing) return;
+    setUseCustomDuration(Boolean(story.duration) && !durationOptions.includes(story.duration));
+    setUseCustomSceneCount(
+      Boolean(story.sceneCount) && !sceneCountOptions.includes(story.sceneCount)
+    );
     setDraft({
       story: story.story,
       protagonist: story.protagonist,
@@ -51,15 +61,17 @@ export function StoryNode({ data, selected }: NodeProps<StudioNode>) {
   ]);
 
   const saveDraft = () => {
+    const duration = Math.max(1, Number.parseInt(draft.duration, 10) || durationOptions[3]);
+    const sceneCount = Math.max(1, Number.parseInt(draft.sceneCount, 10) || sceneCountOptions[3]);
     story.onUpdate?.({
       story: draft.story,
       protagonist: draft.protagonist,
       tone: draft.tone || toneOptions[0],
       style: draft.style || styleOptions[0],
       styleDirection: draft.styleDirection,
-      duration: Number.parseInt(draft.duration, 10) || durationOptions[3],
+      duration,
       aspectRatio: draft.aspectRatio || aspectRatioOptions[0],
-      sceneCount: Number.parseInt(draft.sceneCount, 10) || sceneCountOptions[2],
+      sceneCount,
       renderQuality: draft.renderQuality || renderQualityOptions[0]
     });
     setIsEditing(false);
@@ -134,6 +146,12 @@ export function StoryNode({ data, selected }: NodeProps<StudioNode>) {
       : story.documentAudit?.readiness === "partial"
         ? "Partial"
         : "Needs input";
+  const draftDuration = Number.parseInt(draft.duration, 10) || 0;
+  const draftSceneCount = Number.parseInt(draft.sceneCount, 10) || 0;
+  const draftSecondsPerScene =
+    draftDuration > 0 && draftSceneCount > 0 ? draftDuration / draftSceneCount : 0;
+  const storySecondsPerScene =
+    story.duration > 0 && story.sceneCount > 0 ? story.duration / story.sceneCount : 0;
 
   return (
     <NodeShell selected={selected}>
@@ -219,12 +237,24 @@ export function StoryNode({ data, selected }: NodeProps<StudioNode>) {
               </div>
               <NodeSelect
                 label="Duration"
-                value={draft.duration}
-                options={durationOptions.map((duration) => ({
-                  label: `${duration}s`,
-                  value: String(duration)
-                }))}
-                onChange={(duration) => setDraft((current) => ({ ...current, duration }))}
+                value={useCustomDuration ? "__custom" : draft.duration}
+                options={[
+                  ...durationOptions.map((duration) => ({
+                    label: `${duration}s`,
+                    value: String(duration)
+                  })),
+                  { label: "Custom", value: "__custom" }
+                ]}
+                onChange={(duration) => {
+                  setUseCustomDuration(duration === "__custom");
+                  setDraft((current) => ({
+                    ...current,
+                    duration:
+                      duration === "__custom"
+                        ? current.duration || String(durationOptions[1])
+                        : duration
+                  }));
+                }}
               />
               <NodeSelect
                 label="Format"
@@ -237,12 +267,24 @@ export function StoryNode({ data, selected }: NodeProps<StudioNode>) {
               />
               <NodeSelect
                 label="Scene"
-                value={draft.sceneCount}
-                options={sceneCountOptions.map((sceneCount) => ({
-                  label: `${sceneCount} scene`,
-                  value: String(sceneCount)
-                }))}
-                onChange={(sceneCount) => setDraft((current) => ({ ...current, sceneCount }))}
+                value={useCustomSceneCount ? "__custom" : draft.sceneCount}
+                options={[
+                  ...sceneCountOptions.map((sceneCount) => ({
+                    label: `${sceneCount} scene`,
+                    value: String(sceneCount)
+                  })),
+                  { label: "Custom", value: "__custom" }
+                ]}
+                onChange={(sceneCount) => {
+                  setUseCustomSceneCount(sceneCount === "__custom");
+                  setDraft((current) => ({
+                    ...current,
+                    sceneCount:
+                      sceneCount === "__custom"
+                        ? current.sceneCount || String(sceneCountOptions[3])
+                        : sceneCount
+                  }));
+                }}
               />
               <NodeSelect
                 label="Quality"
@@ -256,6 +298,48 @@ export function StoryNode({ data, selected }: NodeProps<StudioNode>) {
                 }
               />
             </div>
+            {useCustomDuration || useCustomSceneCount ? (
+              <div className="grid grid-cols-2 gap-2">
+                {useCustomDuration ? (
+                  <label className="block rounded-md border border-studio-line bg-slate-950/30 px-3 py-2">
+                    <span className="text-[10px] uppercase tracking-wider text-slate-500">
+                      Custom duration
+                    </span>
+                    <input
+                      className="mt-1 w-full bg-transparent text-xs font-medium text-slate-100 outline-none"
+                      min={1}
+                      type="number"
+                      value={draft.duration}
+                      onChange={(event) =>
+                        setDraft((current) => ({ ...current, duration: event.target.value }))
+                      }
+                    />
+                  </label>
+                ) : null}
+                {useCustomSceneCount ? (
+                  <label className="block rounded-md border border-studio-line bg-slate-950/30 px-3 py-2">
+                    <span className="text-[10px] uppercase tracking-wider text-slate-500">
+                      Custom scenes
+                    </span>
+                    <input
+                      className="mt-1 w-full bg-transparent text-xs font-medium text-slate-100 outline-none"
+                      min={1}
+                      max={12}
+                      type="number"
+                      value={draft.sceneCount}
+                      onChange={(event) =>
+                        setDraft((current) => ({ ...current, sceneCount: event.target.value }))
+                      }
+                    />
+                  </label>
+                ) : null}
+              </div>
+            ) : null}
+            {draftSecondsPerScene > 8 ? (
+              <div className="rounded-md border border-amber-500/30 bg-amber-950/20 px-2.5 py-1.5 text-[10px] leading-snug text-amber-200">
+                Rata-rata {draftSecondsPerScene.toFixed(1)} detik per scene. Veo saat ini paling stabil di 8 detik per generated clip; output video per scene bisa lebih pendek sebelum fitur sub-clip ditambahkan.
+              </div>
+            ) : null}
             <div className="grid grid-cols-2 gap-2">
               <NodeActionButton icon={<X size={14} />} label="Cancel" onClick={() => setIsEditing(false)} />
               <NodeActionButton
@@ -414,6 +498,11 @@ export function StoryNode({ data, selected }: NodeProps<StudioNode>) {
           {!isStoryReady ? (
             <div className="col-span-2 rounded-md border border-amber-500/30 bg-amber-950/20 px-2.5 py-1.5 text-[10px] leading-snug text-amber-200">
               Isi <strong>Cerita</strong> (min. 50 karakter), <strong>Karakter utama</strong>, dan arahan yang masih kurang sebelum generate.
+            </div>
+          ) : null}
+          {storySecondsPerScene > 8 ? (
+            <div className="col-span-2 rounded-md border border-amber-500/30 bg-amber-950/20 px-2.5 py-1.5 text-[10px] leading-snug text-amber-200">
+              Rata-rata {storySecondsPerScene.toFixed(1)} detik per scene. Veo saat ini akan generate maksimal 8 detik per clip.
             </div>
           ) : null}
           <NodeActionButton

@@ -32,11 +32,11 @@ export const styleOptions = [
   "Isometric Miniature"
 ];
 
-export const durationOptions = [15, 30, 45, 60, 90];
+export const durationOptions = [8, 15, 30, 45, 60, 90, 120];
 
 export const aspectRatioOptions = ["9:16", "16:9"];
 
-export const sceneCountOptions = [4, 5, 6, 7, 8];
+export const sceneCountOptions = [1, 2, 3, 4, 5, 6, 7, 8];
 
 export const renderQualityOptions = ["720p", "1080p", "4K"];
 
