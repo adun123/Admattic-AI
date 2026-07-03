@@ -500,12 +500,12 @@ export function StoryNode({ data, selected }: NodeProps<StudioNode>) {
               Reference image dipakai untuk menjaga wajah/identitas karakter antar scene. Gunakan foto original yang kamu miliki hak pakainya.
             </div>
           ) : null}
-          {!isStoryReady ? (
+          {!isEditing && !isStoryReady ? (
             <div className="col-span-2 rounded-md border border-amber-500/30 bg-amber-950/20 px-2.5 py-1.5 text-[10px] leading-snug text-amber-200">
               Isi <strong>Cerita</strong> (min. 50 karakter), <strong>Karakter utama</strong>, dan arahan yang masih kurang sebelum generate.
             </div>
           ) : null}
-          {storySecondsPerScene > 8 ? (
+          {!isEditing && storySecondsPerScene > 8 ? (
             <div className="col-span-2 rounded-md border border-amber-500/30 bg-amber-950/20 px-2.5 py-1.5 text-[10px] leading-snug text-amber-200">
               Rata-rata {storySecondsPerScene.toFixed(1)} detik per scene. Veo saat ini akan generate maksimal 8 detik per clip.
             </div>
