@@ -6,6 +6,67 @@ import type { StoryNodeData, StudioNode } from "../types";
 import { InfoPill, NodeActionButton, NodeInput, NodeSelect, NodeTextArea } from "./NodeControls";
 import { NodeShell } from "./NodeShell";
 
+function CustomizableNumberSelect({
+  label,
+  value,
+  custom,
+  options,
+  unit,
+  min,
+  max,
+  onCustomChange,
+  onValueChange
+}: {
+  label: string;
+  value: string;
+  custom: boolean;
+  options: number[];
+  unit: string;
+  min?: number;
+  max?: number;
+  onCustomChange: (custom: boolean) => void;
+  onValueChange: (value: string) => void;
+}) {
+  return (
+    <label className="block rounded-md border border-studio-line bg-slate-950/30 px-3 py-2">
+      <span className="text-[10px] uppercase tracking-wider text-slate-500">{label}</span>
+      <div className="mt-1 flex items-center gap-2">
+        <select
+          className="min-w-0 flex-1 bg-transparent text-xs font-medium text-slate-100 outline-none"
+          value={custom ? "__custom" : value}
+          onChange={(event) => {
+            const next = event.target.value;
+            onCustomChange(next === "__custom");
+            onValueChange(next === "__custom" ? value || String(options[0]) : next);
+          }}
+        >
+          <option value="" className="bg-slate-950 text-slate-400">
+            Select
+          </option>
+          {options.map((option) => (
+            <option key={option} value={String(option)} className="bg-slate-950 text-slate-100">
+              {option}{unit}
+            </option>
+          ))}
+          <option value="__custom" className="bg-slate-950 text-slate-100">
+            Custom
+          </option>
+        </select>
+        {custom ? (
+          <input
+            className="w-16 rounded border border-studio-line bg-slate-950/50 px-2 py-1 text-right text-xs font-semibold text-slate-100 outline-none focus:border-studio-cyan"
+            min={min}
+            max={max}
+            type="number"
+            value={value}
+            onChange={(event) => onValueChange(event.target.value)}
+          />
+        ) : null}
+      </div>
+    </label>
+  );
+}
+
 export function StoryNode({ data, selected }: NodeProps<StudioNode>) {
   const story = data as StoryNodeData;
   const referenceInputRef = useRef<HTMLInputElement | null>(null);
@@ -235,26 +296,15 @@ export function StoryNode({ data, selected }: NodeProps<StudioNode>) {
                   }
                 />
               </div>
-              <NodeSelect
+              <CustomizableNumberSelect
                 label="Duration"
-                value={useCustomDuration ? "__custom" : draft.duration}
-                options={[
-                  ...durationOptions.map((duration) => ({
-                    label: `${duration}s`,
-                    value: String(duration)
-                  })),
-                  { label: "Custom", value: "__custom" }
-                ]}
-                onChange={(duration) => {
-                  setUseCustomDuration(duration === "__custom");
-                  setDraft((current) => ({
-                    ...current,
-                    duration:
-                      duration === "__custom"
-                        ? current.duration || String(durationOptions[1])
-                        : duration
-                  }));
-                }}
+                value={draft.duration}
+                custom={useCustomDuration}
+                options={durationOptions}
+                unit="s"
+                min={1}
+                onCustomChange={setUseCustomDuration}
+                onValueChange={(duration) => setDraft((current) => ({ ...current, duration }))}
               />
               <NodeSelect
                 label="Format"
@@ -265,26 +315,18 @@ export function StoryNode({ data, selected }: NodeProps<StudioNode>) {
                 }))}
                 onChange={(aspectRatio) => setDraft((current) => ({ ...current, aspectRatio }))}
               />
-              <NodeSelect
+              <CustomizableNumberSelect
                 label="Scene"
-                value={useCustomSceneCount ? "__custom" : draft.sceneCount}
-                options={[
-                  ...sceneCountOptions.map((sceneCount) => ({
-                    label: `${sceneCount} scene`,
-                    value: String(sceneCount)
-                  })),
-                  { label: "Custom", value: "__custom" }
-                ]}
-                onChange={(sceneCount) => {
-                  setUseCustomSceneCount(sceneCount === "__custom");
-                  setDraft((current) => ({
-                    ...current,
-                    sceneCount:
-                      sceneCount === "__custom"
-                        ? current.sceneCount || String(sceneCountOptions[3])
-                        : sceneCount
-                  }));
-                }}
+                value={draft.sceneCount}
+                custom={useCustomSceneCount}
+                options={sceneCountOptions}
+                unit=""
+                min={1}
+                max={12}
+                onCustomChange={setUseCustomSceneCount}
+                onValueChange={(sceneCount) =>
+                  setDraft((current) => ({ ...current, sceneCount }))
+                }
               />
               <NodeSelect
                 label="Quality"
@@ -298,43 +340,6 @@ export function StoryNode({ data, selected }: NodeProps<StudioNode>) {
                 }
               />
             </div>
-            {useCustomDuration || useCustomSceneCount ? (
-              <div className="grid grid-cols-2 gap-2">
-                {useCustomDuration ? (
-                  <label className="block rounded-md border border-studio-line bg-slate-950/30 px-3 py-2">
-                    <span className="text-[10px] uppercase tracking-wider text-slate-500">
-                      Custom duration
-                    </span>
-                    <input
-                      className="mt-1 w-full bg-transparent text-xs font-medium text-slate-100 outline-none"
-                      min={1}
-                      type="number"
-                      value={draft.duration}
-                      onChange={(event) =>
-                        setDraft((current) => ({ ...current, duration: event.target.value }))
-                      }
-                    />
-                  </label>
-                ) : null}
-                {useCustomSceneCount ? (
-                  <label className="block rounded-md border border-studio-line bg-slate-950/30 px-3 py-2">
-                    <span className="text-[10px] uppercase tracking-wider text-slate-500">
-                      Custom scenes
-                    </span>
-                    <input
-                      className="mt-1 w-full bg-transparent text-xs font-medium text-slate-100 outline-none"
-                      min={1}
-                      max={12}
-                      type="number"
-                      value={draft.sceneCount}
-                      onChange={(event) =>
-                        setDraft((current) => ({ ...current, sceneCount: event.target.value }))
-                      }
-                    />
-                  </label>
-                ) : null}
-              </div>
-            ) : null}
             {draftSecondsPerScene > 8 ? (
               <div className="rounded-md border border-amber-500/30 bg-amber-950/20 px-2.5 py-1.5 text-[10px] leading-snug text-amber-200">
                 Rata-rata {draftSecondsPerScene.toFixed(1)} detik per scene. Veo saat ini paling stabil di 8 detik per generated clip; output video per scene bisa lebih pendek sebelum fitur sub-clip ditambahkan.
