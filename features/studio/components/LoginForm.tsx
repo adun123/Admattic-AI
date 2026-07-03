@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Clapperboard, Loader2, Sparkles } from "lucide-react";
+import { Clapperboard, Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 
 export function LoginForm({
@@ -78,11 +78,15 @@ export function LoginForm({
             className="w-full max-w-sm rounded-lg border border-white/[0.12] bg-slate-950/[0.72] p-6 shadow-2xl backdrop-blur-xl"
           >
             <div className="flex items-center gap-3">
-              <div className="grid h-10 w-10 place-items-center rounded-md bg-studio-cyan text-slate-950">
-                <Sparkles size={19} />
+              <div className="grid h-11 w-11 place-items-center overflow-hidden rounded-md border border-white/10 bg-white">
+                <img
+                  alt="Admattic"
+                  className="h-full w-full object-contain p-1"
+                  src="/images/lgo-admattic.jpg"
+                />
               </div>
               <div>
-                <p className="text-sm font-semibold text-white">Campaign Video AI</p>
+                <p className="text-sm font-semibold text-white">Admattic AI Studio</p>
                 <p className="text-xs text-slate-400">Agency Anniversary POC</p>
               </div>
             </div>

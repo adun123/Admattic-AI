@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type React from "react";
 import clsx from "clsx";
-import { CheckCircle2, Download, History as HistoryIcon, Loader2, Play, Plus, Save, Sparkles, X } from "lucide-react";
+import { CheckCircle2, Download, History as HistoryIcon, Loader2, Play, Plus, Save, X } from "lucide-react";
 import type { CostEntry, SaveState, StoredWorkspace } from "../types";
 
 export function TopBar({
@@ -65,11 +65,15 @@ export function TopBar({
   return (
     <header className="flex h-16 shrink-0 items-center justify-between border-b border-studio-line bg-studio-panel px-5">
       <div className="flex items-center gap-3">
-        <div className="grid h-9 w-9 place-items-center rounded-md bg-studio-cyan/15 text-studio-cyan">
-          <Sparkles size={18} />
+        <div className="grid h-9 w-9 place-items-center overflow-hidden rounded-md border border-studio-line bg-white">
+          <img
+            alt="Admattic"
+            className="h-full w-full object-contain p-1"
+            src="/images/lgo-admattic.jpg"
+          />
         </div>
         <div>
-          <h1 className="text-sm font-semibold">AI Video Storytelling Studio</h1>
+          <h1 className="text-sm font-semibold">Admattic AI Studio</h1>
           <p className="text-xs text-slate-400">Agency Anniversary POC</p>
         </div>
       </div>
