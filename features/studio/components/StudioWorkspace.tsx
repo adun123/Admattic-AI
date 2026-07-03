@@ -25,6 +25,21 @@ function normalizeWorkspaceNodes(nodes: StudioNode[]) {
   });
 }
 
+function getCostStorageKey(workspaceId: string, projectId: string | null) {
+  return `${COST_STORAGE_KEY}:${projectId ?? workspaceId}`;
+}
+
+function readCostLog(workspaceId: string, projectId: string | null) {
+  if (typeof window === "undefined") return [];
+
+  try {
+    const stored = window.localStorage.getItem(getCostStorageKey(workspaceId, projectId));
+    return stored ? (JSON.parse(stored) as CostEntry[]) : [];
+  } catch {
+    return [];
+  }
+}
+
 export function StudioWorkspace({
   userEmail,
   onLogout
@@ -43,23 +58,17 @@ export function StudioWorkspace({
   const [isAnalyzingStoryFile, setIsAnalyzingStoryFile] = useState(false);
   const [workspaceHistory, setWorkspaceHistory] = useState<StoredWorkspace[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [costLog, setCostLog] = useState<CostEntry[]>(() => {
-    if (typeof window === "undefined") return [];
-    try {
-      const stored = window.localStorage.getItem(COST_STORAGE_KEY);
-      return stored ? (JSON.parse(stored) as CostEntry[]) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [costLog, setCostLog] = useState<CostEntry[]>(() =>
+    readCostLog("local-draft", null)
+  );
   const hasRestoredWorkspace = useRef(false);
 
   const resetCostLog = useCallback(() => {
     setCostLog([]);
     try {
-      window.localStorage.removeItem(COST_STORAGE_KEY);
+      window.localStorage.removeItem(getCostStorageKey(workspaceId, projectId));
     } catch {}
-  }, []);
+  }, [projectId, workspaceId]);
 
   const deleteWorkspaceHistory = useCallback(
     (workspace: StoredWorkspace) => {
@@ -81,6 +90,10 @@ export function StudioWorkspace({
     (params: Connection) => setEdges((eds) => addEdge(params, eds)),
     [setEdges]
   );
+
+  useEffect(() => {
+    setCostLog(readCostLog(workspaceId, projectId));
+  }, [projectId, workspaceId]);
 
   const updateNodeData = useCallback(
     (
@@ -566,7 +579,10 @@ export function StudioWorkspace({
               }
             ];
             try {
-              window.localStorage.setItem(COST_STORAGE_KEY, JSON.stringify(next));
+              window.localStorage.setItem(
+                getCostStorageKey(workspaceId, projectId),
+                JSON.stringify(next)
+              );
             } catch {}
             return next;
           });
@@ -647,7 +663,7 @@ export function StudioWorkspace({
 
       setSaveState("idle");
     },
-    [nodes, setEdges, setNodes]
+    [nodes, projectId, setEdges, setNodes, workspaceId]
   );
 
   const loadWorkspace = useCallback(
@@ -865,7 +881,19 @@ export function StudioWorkspace({
       if (projectResult.error) throw projectResult.error;
 
       const activeProjectId = projectResult.data.id as string;
+      const previousProjectId = projectId;
       setProjectId(activeProjectId);
+      if (!previousProjectId && activeProjectId) {
+        try {
+          const previousCostKey = getCostStorageKey(workspaceId, null);
+          const nextCostKey = getCostStorageKey(workspaceId, activeProjectId);
+          const previousCostLog = window.localStorage.getItem(previousCostKey);
+          if (previousCostLog && !window.localStorage.getItem(nextCostKey)) {
+            window.localStorage.setItem(nextCostKey, previousCostLog);
+            setCostLog(JSON.parse(previousCostLog) as CostEntry[]);
+          }
+        } catch {}
+      }
 
       const { error: storyError } = await supabase.from("story_inputs").upsert(
         {
